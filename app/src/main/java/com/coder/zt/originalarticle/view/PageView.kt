@@ -8,8 +8,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Scroller
+import androidx.constraintlayout.solver.widgets.analyzer.VerticalWidgetRun
 import com.coder.zt.originalarticle.view.animation.CommonSlideAnimation
 import com.coder.zt.originalarticle.view.animation.IPageAnimation
+import com.coder.zt.originalarticle.view.animation.VerticalSlideAnimation
 import com.coder.zt.originalarticle.view.utils.ScreenUtils
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -26,12 +28,19 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
     private var downTouchTime:Long = -1
     private var upTouchTime:Long = -1
     private var canSlidePage = false
+    private val pageStyle:Int = 1
+    private var mOnceSlideDistance = 0
     private val mScroller:Scroller by lazy {
         val interpolator = AccelerateDecelerateInterpolator()
         Scroller(context, interpolator)
     }
     private val pageAnimation:IPageAnimation by lazy {
-        CommonSlideAnimation(context)
+        when(pageStyle){
+            0-> CommonSlideAnimation(context)
+            1-> VerticalSlideAnimation(context)
+            else -> CommonSlideAnimation(context)
+        }
+
     }
     private var mListener:OnTouchEventListener? = null
         fun set(listener: OnTouchEventListener) {
@@ -54,13 +63,13 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
                     downTouchTime = System.currentTimeMillis()
                 }
                 MotionEvent.ACTION_MOVE-> {
-                    updateDrawPoint()
+                    updateDrawPoint(false)
                     if(isLongCLick()){
                         mListener?.onLongClick(Point(currentTouchPoint.x, currentTouchPoint.y))
                     }
                 }
                 MotionEvent.ACTION_UP-> {
-                    updateDrawPoint()
+                    updateDrawPoint(true)
                     upTouchTime = System.currentTimeMillis()
                     if(isClickEvent()){
                         mListener?.onClick(Point(currentTouchPoint.x, currentTouchPoint.y))
@@ -78,6 +87,9 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
     }
 
     private fun startPageSlide() {
+        if(pageStyle == 1){
+            return
+        }
         Log.d(TAG, "startPageSlide: ")
         val dx = ScreenUtils.getScreenSize(context).x
         mScroller.startScroll(currentDrawPoint.x,0,dx-currentDrawPoint.x, 0)
@@ -90,12 +102,45 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
         return touchTime > 1000 && moveDistance < disten
     }
 
-    private fun updateDrawPoint() {
+    private fun updateDrawPoint(isUp:Boolean) {
+        //纵向滑动的时候
+        val direction = if(pageStyle == 1){
+            val xDiff = kotlin.math.abs(downTouchPoint.x - currentTouchPoint.x)
+            var yDiff = kotlin.math.abs(downTouchPoint.y - currentTouchPoint.y)
+            yDiff += mOnceSlideDistance
+            if(isUp){
+                mOnceSlideDistance = yDiff
+            }
+            if(yDiff > ScreenUtils.getScreenSize(context).y){
+                mListener?.apply {
+                    if(nextDirection){
+                        nextPage()
+                    }else {
+                        perPage()
+                    }
+                }
+                yDiff %= (ScreenUtils.getScreenSize(context).y)
+                mOnceSlideDistance = 0
+                downTouchPoint.y = currentTouchPoint.y
+                downTouchPoint.x = currentTouchPoint.x
+            }
+            currentDrawPoint = Point(xDiff, yDiff)
+            currentTouchPoint.y <= downTouchPoint.y
         //横向滑动的时候
-        nextDirection = currentTouchPoint.x <= downTouchPoint.x
-        val xDiff = kotlin.math.abs(downTouchPoint.x - currentTouchPoint.x)
-        val yDiff = kotlin.math.abs(downTouchPoint.y - currentTouchPoint.y)
-        currentDrawPoint = Point(xDiff, yDiff)
+        }else{
+            val xDiff = kotlin.math.abs(downTouchPoint.x - currentTouchPoint.x)
+            val yDiff = kotlin.math.abs(downTouchPoint.y - currentTouchPoint.y)
+            currentDrawPoint = Point(xDiff, yDiff)
+            currentTouchPoint.x < downTouchPoint.x
+        }
+        if(direction != nextDirection && pageStyle == 1){
+            Log.d(TAG, "updateDrawPoint: 方向变化 $direction <====> $nextDirection")
+            mOnceSlideDistance = 0 
+//            downTouchPoint.y = currentTouchPoint.y
+//            downTouchPoint.x = currentTouchPoint.x
+            nextDirection = direction
+        }
+        Log.d(TAG, "updateDrawPoint: $direction")
     }
 
     private fun isClickEvent():Boolean{
@@ -124,7 +169,9 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
                 }
             }
             currentDrawPoint.x = 0
-            nextDirection = true
+            if (pageStyle != 1) {
+                nextDirection = true
+            }
             canSlidePage = false
             invalidate()
         }

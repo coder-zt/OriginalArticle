@@ -26,6 +26,8 @@ class CommonSlideAnimation(private val context: Context):IPageAnimation{
             //取当前页的后部分，取后一页的前部分
             val currentRightRect = Rect(drawPoint.x, 0, nextBitmap.width, nextBitmap.height)
             val nextLeftRect = Rect(0, 0, drawPoint.x, nextBitmap.height)
+            Log.d(TAG, "drawCurrentState:currentRightRect --->  $currentRightRect")
+            Log.d(TAG, "drawCurrentState:nextLeftRect --->  $nextLeftRect")
             canvas.drawBitmap(currentBitmap,currentRightRect, leftCanvas, Paint())
             canvas.drawBitmap(nextBitmap,nextLeftRect, rightCanvas, Paint())
         }else{
@@ -35,8 +37,10 @@ class CommonSlideAnimation(private val context: Context):IPageAnimation{
             Log.d(TAG, "drawCurrentState:leftCanvas --->  $leftCanvas")
             Log.d(TAG, "drawCurrentState:rightCanvas --->  $rightCanvas")
             //取前一页的后部分，取当前页的前部分
-            val perRightRect = Rect(drawPoint.x, 0, nextBitmap.width, nextBitmap.height)
-            val currentLeftRect = Rect(0, 0, drawPoint.x, nextBitmap.height)
+            val perRightRect = Rect(nextBitmap.width - drawPoint.x, 0, nextBitmap.width, nextBitmap.height)
+            val currentLeftRect = Rect(0, 0, nextBitmap.width - drawPoint.x, nextBitmap.height)
+            Log.d(TAG, "drawCurrentState:perRightRect --->  $perRightRect")
+            Log.d(TAG, "drawCurrentState:currentLeftRect --->  $currentLeftRect")
             canvas.drawBitmap(preBitmap,perRightRect, leftCanvas, Paint())
             canvas.drawBitmap(currentBitmap,currentLeftRect, rightCanvas, Paint())
         }
