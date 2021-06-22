@@ -67,10 +67,12 @@ class CircularBitmapQueue(private val context: Context):ICircularBitmapQueue {
 
     fun nextPage() {
         currentIndex = (currentIndex + 1)%3
+        Log.d(TAG, "nextPage:  currentIndex = $currentIndex")
     }
 
     fun perPage() {
         currentIndex = (currentIndex + 2)%3
+        Log.d(TAG, "perPage: currentIndex = $currentIndex")
     }
 
     companion object{

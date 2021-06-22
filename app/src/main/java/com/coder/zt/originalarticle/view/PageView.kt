@@ -5,6 +5,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Scroller
@@ -13,6 +14,7 @@ import com.coder.zt.originalarticle.view.animation.CommonSlideAnimation
 import com.coder.zt.originalarticle.view.animation.IPageAnimation
 import com.coder.zt.originalarticle.view.animation.VerticalSlideAnimation
 import com.coder.zt.originalarticle.view.utils.ScreenUtils
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -22,15 +24,20 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
     private val clickTime:Long = 150
     private val disten:Long = 20
     private var nextDirection:Boolean = true
-    private var currentDrawPoint:Point = Point(0, 0)
-    private var currentTouchPoint:Point = Point(0, 0)
+    private val currentDrawPoint:Point = Point(0, 0)
+    private val currentTouchPoint:Point = Point(0, 0)
     private var downTouchPoint:Point = Point(0, 0)
     private var downTouchTime:Long = -1
     private var upTouchTime:Long = -1
     private var canSlidePage = false
     private val pageStyle:Int = 1
     private var mOnceSlideDistance = 0
+    private var perCurrentPointY = 0
     private val mScroller:Scroller by lazy {
+        val interpolator = AccelerateDecelerateInterpolator()
+        Scroller(context, interpolator)
+    }
+    private val mFlyScroller:Scroller by lazy {
         val interpolator = AccelerateDecelerateInterpolator()
         Scroller(context, interpolator)
     }
@@ -46,6 +53,9 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
         fun set(listener: OnTouchEventListener) {
              mListener = listener
         }
+    private val mVelocityTracker: VelocityTracker by lazy {
+        VelocityTracker.obtain()
+    }
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
@@ -56,10 +66,15 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         if (event != null) {
-            currentTouchPoint = Point(event.x.toInt(), event.y.toInt())
+            mVelocityTracker.addMovement(event)
+            perCurrentPointY = currentTouchPoint.y
+            currentTouchPoint.x = event.x.toInt()
+            currentTouchPoint.y = event.y.toInt()
             when (event.action) {
                 MotionEvent.ACTION_DOWN-> {
-                    downTouchPoint = currentTouchPoint
+                    mFlyScroller.abortAnimation()
+                    downTouchPoint.x = currentTouchPoint.x
+                    downTouchPoint.y = currentTouchPoint.y
                     downTouchTime = System.currentTimeMillis()
                 }
                 MotionEvent.ACTION_MOVE-> {
@@ -104,43 +119,51 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
 
     private fun updateDrawPoint(isUp:Boolean) {
         //纵向滑动的时候
-        val direction = if(pageStyle == 1){
-            val xDiff = kotlin.math.abs(downTouchPoint.x - currentTouchPoint.x)
-            var yDiff = kotlin.math.abs(downTouchPoint.y - currentTouchPoint.y)
+        nextDirection = if(pageStyle == 1){
+            val xDiff =downTouchPoint.x - currentTouchPoint.x
+            var yDiff =downTouchPoint.y - currentTouchPoint.y
+            val yyDiff = yDiff
             yDiff += mOnceSlideDistance
-            if(isUp){
-                mOnceSlideDistance = yDiff
-            }
+
             if(yDiff > ScreenUtils.getScreenSize(context).y){
                 mListener?.apply {
-                    if(nextDirection){
-                        nextPage()
-                    }else {
-                        perPage()
-                    }
+                    nextPage()
                 }
-                yDiff %= (ScreenUtils.getScreenSize(context).y)
-                mOnceSlideDistance = 0
+                yDiff -= ScreenUtils.getScreenSize(context).y
                 downTouchPoint.y = currentTouchPoint.y
                 downTouchPoint.x = currentTouchPoint.x
+                mOnceSlideDistance = yDiff
+            }else if(yDiff < (-ScreenUtils.getScreenSize(context).y)){
+                mListener?.apply {
+                    perPage()
+                }
+                yDiff += ScreenUtils.getScreenSize(context).y
+                downTouchPoint.y = currentTouchPoint.y
+                downTouchPoint.x = currentTouchPoint.x
+                mOnceSlideDistance = yDiff
+            } else if(isUp){
+                mOnceSlideDistance = yDiff
+                mVelocityTracker.computeCurrentVelocity(1000)
+                mVelocityTracker.yVelocity
+                Log.d(TAG, "updateDrawPoint: YVerlocity: ${mVelocityTracker.yVelocity}")
+                mFlyScroller.startScroll(0,mVelocityTracker.yVelocity.toInt(),0, -mVelocityTracker.yVelocity.toInt(),1000)
             }
-            currentDrawPoint = Point(xDiff, yDiff)
-            currentTouchPoint.y <= downTouchPoint.y
+            currentDrawPoint.x = xDiff
+            currentDrawPoint.y = yDiff
+            Log.d(TAG, "updateDrawPoint: mOnceSlideDistance: $mOnceSlideDistance  yDiff: $yDiff $yyDiff ")
+            var dir = currentTouchPoint.y < perCurrentPointY
+            if(currentTouchPoint.y == perCurrentPointY ){
+                dir = nextDirection
+            }
+            dir
         //横向滑动的时候
         }else{
             val xDiff = kotlin.math.abs(downTouchPoint.x - currentTouchPoint.x)
             val yDiff = kotlin.math.abs(downTouchPoint.y - currentTouchPoint.y)
-            currentDrawPoint = Point(xDiff, yDiff)
-            currentTouchPoint.x < downTouchPoint.x
+            currentDrawPoint.x = xDiff
+            currentDrawPoint.y = yDiff
+            currentTouchPoint.y < perCurrentPointY
         }
-        if(direction != nextDirection && pageStyle == 1){
-            Log.d(TAG, "updateDrawPoint: 方向变化 $direction <====> $nextDirection")
-            mOnceSlideDistance = 0 
-//            downTouchPoint.y = currentTouchPoint.y
-//            downTouchPoint.x = currentTouchPoint.x
-            nextDirection = direction
-        }
-        Log.d(TAG, "updateDrawPoint: $direction")
     }
 
     private fun isClickEvent():Boolean{
@@ -175,7 +198,34 @@ class PageView(context: Context, attrs:AttributeSet): View(context, attrs) {
             canSlidePage = false
             invalidate()
         }
+        if(mFlyScroller.computeScrollOffset()){
+            Log.d(TAG, "computeScroll: mFlyScroller.currY: ${mFlyScroller.currY}")
+            updateFlyDrawPoint(mFlyScroller.currY)
+            invalidate()
+        }
     }
+
+    private fun updateFlyDrawPoint(currY: Int) {
+        val xDiff =0
+        var yDiff = mOnceSlideDistance - currY/80
+        mOnceSlideDistance = yDiff
+        if(yDiff > ScreenUtils.getScreenSize(context).y){
+            mListener?.apply {
+                nextPage()
+            }
+            yDiff -= ScreenUtils.getScreenSize(context).y
+            mOnceSlideDistance = yDiff
+        }else if(yDiff < (-ScreenUtils.getScreenSize(context).y)){
+            mListener?.apply {
+                perPage()
+            }
+            yDiff += ScreenUtils.getScreenSize(context).y
+            mOnceSlideDistance = yDiff
+        }
+        currentDrawPoint.x = xDiff
+        currentDrawPoint.y = yDiff
+    }
+
 
     interface OnTouchEventListener{
 
